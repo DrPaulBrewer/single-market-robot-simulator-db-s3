@@ -1,0 +1,27 @@
+{
+  "name": "single-market-robot-simulator-db-s3",
+  "version": "0.1.0",
+  "description": "study folder class for s3-based collections of study folders",
+  "exports": "./src/index.mjs",
+  "scripts": {
+    "lint": "node_modules/.bin/eslint src/**.mjs",
+    "test": "c8 --reporter=text mocha  --slow 50 --timeout 60000",
+    "go": "npm run lint && npm run test"
+  },
+  "author": "drpaulbrewer@eaftc.com",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/drpaulbrewer/single-market-robot-simulator-db-s3"
+  },
+  "devDependencies": {
+    "c8": "^7.11.2",
+    "eslint": "^8.14.0",
+    "mocha": "^10.0.0",
+    "should": "^13.2.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.121.0",
+    "single-market-robot-simulator-db-studyfolder": "^3.1.0"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "name": "Intro-1-ZI-Agent-Vary-Number-of-Buyers",
+  "description": "The ZI Agents send random bids and asks constrained to avoid losses.  Buyers send buy orders (bids) for less than the unit value. Sellers send sell orders (asks) for more than the unit cost",
+  "simplify": false,
+  "common": {
+    "periods": 1,
+    "L": 1,
+    "H": 1000,
+    "buyerValues": [
+      800,
+      770,
+      740,
+      710,
+      680,
+      650,
+      620,
+      590,
+      560,
+      530,
+      500,
+      470,
+      440,
+      410,
+      380,
+      350,
+      320,
+      290,
+      260,
+      230,
+      200
+    ],
+    "sellerCosts": [
+      200,
+      230,
+      260,
+      290,
+      320,
+      350,
+      380,
+      410,
+      440,
+      470,
+      500,
+      530,
+      560,
+      590,
+      620,
+      650,
+      680,
+      710,
+      740,
+      770,
+      800
+    ],
+    "numberOfSellers": 10,
+    "buyerRate": [
+      0.2
+    ],
+    "sellerRate": [
+      0.2
+    ],
+    "buyerAgentType": [
+      "ZIAgent"
+    ],
+    "sellerAgentType": [
+      "ZIAgent"
+    ],
+    "periodDuration": 1000,
+    "keepPreviousOrders": false,
+    "ignoreBudgetConstraint": false,
+    "integer": true,
+    "xMarket": {
+      "buySellBookLimit": 0,
+      "resetAfterEachTrade": false
+    },
+    "silent": true,
+    "version": 2,
+    "withoutOrderLogs": false
+  },
+  "configurations": [
+    {
+      "numberOfBuyers": 2
+    },
+    {
+      "numberOfBuyers": 20
+    }
+  ],
+  "morph": {
+    "numberOfConfigurations": 19,
+    "numberOfBuyers": "interpolate"
+  }
+}

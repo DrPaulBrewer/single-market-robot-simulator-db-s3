@@ -1,0 +1,10 @@
+.github
+gpg
+node_modules
+*~
+test-storage.json
+test/data
+test
+.idea
+coverage
+s3.json
