@@ -25,10 +25,11 @@ describe('single-market-robot-simulator-db-s3', function(){
           s3DB = new S3BucketDB(s3Json);
       });
 
-      it('listStudyFolders() should find Intro-1-ZI-Agent-Vary-Number-of-Buyers', async function(){
+      it('listStudyFolders() should find Intro-1-ZI-Agent-Vary-Number-of-Buyers and no-zips-yet', async function(){
         folders = await s3DB.listStudyFolders();
-        folders.length.should.equal(1);
+        folders.length.should.equal(2);
         folders[0].name.should.equal('Intro-1-ZI-Agent-Vary-Number-of-Buyers');
+        folders[1].name.should.equal('no-zips-yet');
       });
       it('listStudyFolders("no-such-folder") should return empty array []', async function(){
           const folder = await s3DB.listStudyFolders('no-such-folder');
@@ -78,6 +79,25 @@ describe('single-market-robot-simulator-db-s3', function(){
      });
      it('folder.download({}) rejects', async function(){
           return folders[0].download({}).should.be.rejected();
+     });
+     it('folder.upload config.json rejects with Policy Violation', async function(){
+         const options = {
+             name: 'config.json',
+             contents: {
+                 name: 'test123'
+             }
+         };
+         return folders[0].upload(options).should.be.rejectedWith(/Policy Violation/);
+     });
+     it('folder.upload config.json should succeed', async function(){
+        const newFolder = s3DB.newFolder('no-zips-yet');
+        const options = {
+             name: 'config.json',
+             contents: {
+                 name: 'test123'
+             }
+        };
+        await newFolder.upload(options);
      });
   });
 });

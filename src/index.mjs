@@ -2,6 +2,7 @@
 /* This file is open source software.  The MIT License applies to this software. */
 
 import { S3, ListObjectsCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
 import { expectSafeObject, StudyFolder } from "single-market-robot-simulator-db-studyfolder";
 
 const handlers = [
@@ -91,6 +92,23 @@ export class S3BucketDB {
     if (name){ listOptions.prefix = name+'/'; }
     return this.#list(listOptions);
   }
+
+  newFolder(name){
+    const s3Client = this.#s3Client;
+    const bucket = this.#bucket;
+    const list = this.#list;
+    const subList = ({map, filter, prefix}) => (list({
+      prefix: name + '/' + ((prefix?.length>0)? prefix: ''),
+      map,
+      filter
+    }));
+    return new StudyFolderForS3({
+      name,
+      s3Client,
+      bucket,
+      list: subList
+    })
+  }
 }
 
 export class StudyFolderForS3 extends StudyFolder {
@@ -99,11 +117,7 @@ export class StudyFolderForS3 extends StudyFolder {
   #list;
 
   constructor(options){
-    super({
-      name: options.name,
-      size: options?.size,
-      dated: options?.dated
-    });
+    super({name: options.name});
     this.#s3Client = options.s3Client;
     this.#bucket = options.bucket;
     this.#list = options.list;
@@ -140,7 +154,7 @@ export class StudyFolderForS3 extends StudyFolder {
       if (s3Response?.$metadata?.httpStatusCode===200){
         // Don't reinvent wheel. Let the Response API in the browser/node18 handle it from here.
         const response = new Response(s3Response.Body);
-        const result = (method===null)? response: await response[method]();
+        const result = (method)? (await response[method]()): response;
         if (typeof(result)==='object')
           expectSafeObject(result);
         return result;
@@ -148,5 +162,28 @@ export class StudyFolderForS3 extends StudyFolder {
       throw new Error(`download failed for ${name}`);
     }
     throw new Error(`download unimplemented for ${name}`);
+  }
+
+  async upload(options){
+    await this.prepUpload(options);
+    const {name, blob } = options;
+    const params = {
+      Bucket: this.#bucket,
+      Key: `${this.name}/${name}`,
+      Body: blob
+    };
+    const parallelUploads = new Upload({
+      client: this.#s3Client,
+      params,
+      queueSize: 4, // optional concurrency configuration
+      partSize: 1024 * 1024 * 5, // optional size of each part, in bytes, at least 5MB
+      leavePartsOnError: false, // optional manually handle dropped parts
+    });
+
+    parallelUploads.on("httpUploadProgress", (progress) => {
+      console.log({ source:'upload', progress});
+    });
+
+    await parallelUploads.done();
   }
 }
