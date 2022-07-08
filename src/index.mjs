@@ -1,9 +1,13 @@
 /* Copyright 2022- Paul Brewer, Economic and Financial Technology Consulting LLC */
 /* This file is open source software.  The MIT License applies to this software. */
 
-import { S3, ListObjectsCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { XMLParser } from 'fast-xml-parser';
+import { S3, ListObjectsCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import { expectSafeObject, StudyFolder } from "single-market-robot-simulator-db-studyfolder";
+
+const XML = new XMLParser();
 
 const handlers = [
   ['json','json'],
@@ -22,8 +26,13 @@ function s3Lister(s3Client,bucket){
     const input = { Bucket: bucket };
     if (prefix) input.Prefix = prefix;
     const command = new ListObjectsCommand(input);
-    const response = await s3Client.send(command);
-    let { Contents, IsTruncated, NextMarker } = response;
+    const signedUrl = await getSignedUrl(s3Client, command, {expiresIn: 60});
+    const response = await fetch(signedUrl);
+    const responseText = await response.text();
+    const responseObj = XML.parse(responseText);
+    let { Contents, IsTruncated, NextMarker } = responseObj?.ListBucketResult;
+    if ((typeof(Contents)==='object') && !(Array.isArray(Contents))) Contents=[Contents];
+    if (Contents===undefined) Contents = [];
     if (!Array.isArray(Contents) || (Contents.length===0))
       return [];
     if (filtertype==='function')
@@ -144,16 +153,15 @@ export class StudyFolderForS3 extends StudyFolder {
         Bucket: this.#bucket,
         Key: `${this.name}/${name}`
       };
-      let s3Response;
+      let response;
       try {
-        s3Response = await this.#s3Client.send(new GetObjectCommand(obj));
+          const command = new GetObjectCommand(obj);
+          const signedUrl = await getSignedUrl(this.#s3Client, command, {expiresIn: 60});
+          response = await fetch(signedUrl);
       } catch(e){
-        if (e?.Code!=='NoSuchKey')
           console.log(e);
       }
-      if (s3Response?.$metadata?.httpStatusCode===200){
-        // Don't reinvent wheel. Let the Response API in the browser/node18 handle it from here.
-        const response = new Response(s3Response.Body);
+      if (response?.ok){
         const result = (method)? (await response[method]()): response;
         if (typeof(result)==='object')
           expectSafeObject(result);
@@ -170,7 +178,7 @@ export class StudyFolderForS3 extends StudyFolder {
     const params = {
       Bucket: this.#bucket,
       Key: `${this.name}/${name}`,
-      Body: blob
+      Body: await blob
     };
     const parallelUploads = new Upload({
       client: this.#s3Client,
