@@ -1,6 +1,6 @@
 {
   "name": "single-market-robot-simulator-db-s3",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "study folder class for s3-based collections of study folders",
   "exports": "./src/index.mjs",
   "scripts": {
