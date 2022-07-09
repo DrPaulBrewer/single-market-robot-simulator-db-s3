@@ -57,14 +57,16 @@ export class S3BucketDB {
    * @param options
    * @param {string} options.endpoint s3 endpoint
    * @param {string?} options.region s3 region
+   * @param {string?} options.signingRegion region for signature
    * @param {string} options.bucket s3 bucket name
    * @param {string} options.a s3 access key id
    * @param {string} options.s s3 secret key
+   * @param {boolean} options.forcePathStyle true for "https://endpoint/bucket"
    * @returns {Promise<Any>}
    */
   constructor(options){
     const s3Options = {};
-    ['endpoint','region'].forEach((k)=>{
+    ['endpoint','region','signingRegion'].forEach((k)=>{
       if ((typeof(options[k])==='string') && (options[k].length>0))
         s3Options[k] = options[k];
     });
@@ -73,6 +75,7 @@ export class S3BucketDB {
       secretAccessKey: options.s
     };
     s3Options.credentials = credentials;
+    if (options?.forcePathStyle) s3Options.forcePathStyle=true;
     this.#s3Client = new S3(s3Options);
     this.#bucket = options.bucket;
     this.#list = s3Lister(this.#s3Client,this.#bucket);
