@@ -4,7 +4,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import { S3, ListObjectsCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { Upload } from "@aws-sdk/lib-storage";
 import { expectSafeObject, StudyFolder } from "single-market-robot-simulator-db-studyfolder";
 
 const XML = new XMLParser();
@@ -16,7 +15,30 @@ const handlers = [
   ['zip','arrayBuffer']
 ];
 
+function s3fetcher(s3Client){
+  return async function({command,fetchOptions,raw}){
+    const signedUrl = await getSignedUrl(s3Client, command, {expiresIn: 60});
+    const response = await fetch(signedUrl, fetchOptions);
+    if (raw) return response;
+    const responseText = await response.text();
+    const isJSON = responseText.startsWith('[') || responseText.startsWith('{');
+    const isXML = responseText.slice(0,5).toLowerCase().startsWith('<?xml');
+    if (isJSON){
+       const parsed = JSON.parse(responseText);
+       expectSafeObject(parsed);
+       return [response.ok,parsed];
+    }
+    if (isXML){
+       const parsed = XML.parse(responseText);
+       expectSafeObject(parsed);
+       return [response.ok,parsed];
+    }
+    return [response.ok,{text:responseText}];
+  };
+}
+
 function s3Lister(s3Client,bucket){
+  const s3SignedFetch = s3fetcher(s3Client);
   return async function ({prefix,map,filter}){
     const maptype = typeof(map);
     const filtertype = typeof(filter);
@@ -26,10 +48,14 @@ function s3Lister(s3Client,bucket){
     const input = { Bucket: bucket };
     if (prefix) input.Prefix = prefix;
     const command = new ListObjectsCommand(input);
-    const signedUrl = await getSignedUrl(s3Client, command, {expiresIn: 60});
-    const response = await fetch(signedUrl);
-    const responseText = await response.text();
-    const responseObj = XML.parse(responseText);
+    let [ok, responseObj] = await s3SignedFetch({command});
+    if (!ok){
+       if (responseObj?.Error){
+          const {Code, Message} = responseObj.Error;
+	  throw new Error(`s3 ListObjects Error: ${Code} ${Message}`);
+       }
+       throw new Error("Error occurred in s3 ListObjects");
+    }
     let { Contents, IsTruncated, NextMarker } = responseObj?.ListBucketResult;
     if ((typeof(Contents)==='object') && !(Array.isArray(Contents))) Contents=[Contents];
     if (Contents===undefined) Contents = [];
@@ -124,13 +150,13 @@ export class S3BucketDB {
 }
 
 export class StudyFolderForS3 extends StudyFolder {
-  #s3Client;
+  #s3SignedFetch;
   #bucket;
   #list;
 
   constructor(options){
     super({name: options.name});
-    this.#s3Client = options.s3Client;
+    this.#s3SignedFetch = s3fetcher(options.s3Client);
     this.#bucket = options.bucket;
     this.#list = options.list;
   }
@@ -159,8 +185,7 @@ export class StudyFolderForS3 extends StudyFolder {
       let response;
       try {
           const command = new GetObjectCommand(obj);
-          const signedUrl = await getSignedUrl(this.#s3Client, command, {expiresIn: 60});
-          response = await fetch(signedUrl);
+	  response = await this.#s3SignedFetch({command, raw:true});
       } catch(e){
           console.log(e);
       }
@@ -178,23 +203,24 @@ export class StudyFolderForS3 extends StudyFolder {
   async upload(options){
     await this.prepUpload(options);
     const {name, blob } = options;
+    const body = await blob.arrayBuffer();
     const params = {
       Bucket: this.#bucket,
       Key: `${this.name}/${name}`,
-      Body: await blob
+      Body: body,
+     };
+    const command = new PutObjectCommand(params);
+    const fetchOptions = {
+      method: 'PUT',
+      body,
+      headers: {
+         "Content-Length": blob.size,
+      }
     };
-    const parallelUploads = new Upload({
-      client: this.#s3Client,
-      params,
-      queueSize: 4, // optional concurrency configuration
-      partSize: 1024 * 1024 * 5, // optional size of each part, in bytes, at least 5MB
-      leavePartsOnError: false, // optional manually handle dropped parts
-    });
+    const [ok, parsedResponse] = await this.#s3SignedFetch({command, fetchOptions});
+    if (!ok)
+      throw new Error("s3 PutObjectCommand "+JSON.stringify(parsedResponse));
 
-    parallelUploads.on("httpUploadProgress", (progress) => {
-      console.log({ source:'upload', progress});
-    });
-
-    await parallelUploads.done();
+    return true;
   }
 }
